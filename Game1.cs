@@ -2,6 +2,7 @@
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using System;
+using System.Collections.Generic;
 
 namespace CircusCharlieGame
 {
@@ -12,15 +13,24 @@ namespace CircusCharlieGame
 
         Model player;
         Model barrel;
+        List<Vector3> barrelsPos;
+
+        Model ground;
         SpriteFont gameFont;
+        SpriteFont developedFont;
 
         int score;
         bool gameOver;
         bool gameStart;
+        bool countDown;
+        bool notAtMaxHeight;
+        int count;
 
         Matrix proj;
         Matrix view;
         Matrix world;
+
+        Matrix worldGround;
 
         float difficulty;
 
@@ -47,10 +57,15 @@ namespace CircusCharlieGame
         {
             // TODO: Add your initialization logic here
 
+            barrelsPos = new List<Vector3>();
+
             score = 0;
             difficulty = 0.05f;
             gameOver = false;
             gameStart = false;
+            countDown = false;
+            notAtMaxHeight = true;
+            count = 10;
 
             rand = new Random();
 
@@ -71,6 +86,8 @@ namespace CircusCharlieGame
                     Matrix.CreateRotationX(MathHelper.ToRadians(90)) *
                     Matrix.CreateTranslation(barrelPos);
 
+            worldGround = Matrix.CreateScale(10, 0.001f, 10);
+
             base.Initialize();
         }
 
@@ -79,7 +96,9 @@ namespace CircusCharlieGame
             _spriteBatch = new SpriteBatch(GraphicsDevice);
             player = Content.Load<Model>("Animal_Rigged_Zebu_01");
             barrel = Content.Load<Model>("Barrel_Sealed_01");
+            ground = Content.Load<Model>("Uneven_Ground_Dirt_01");
             gameFont = Content.Load<SpriteFont>("gamefont");
+            developedFont = Content.Load<SpriteFont>("DevelopedFont");
 
             // TODO: use this.Content to load your game content here
         }
@@ -89,12 +108,33 @@ namespace CircusCharlieGame
             if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
                 Exit();
 
+            count--;
+
+            if (count == 0)
+                countDown = false;
+
 
             if(gameStart == false)
             {
                 if(Keyboard.GetState().IsKeyDown(Keys.Space))
                 {
                     gameStart = true;
+                    countDown = true;
+                }
+            }
+
+            //reset the game
+            if(gameOver == true)
+            {
+                if (Keyboard.GetState().IsKeyDown(Keys.Space))
+                {
+                    gameOver = false;
+                    gameStart = true;
+                    barrelsPos.Clear();
+                    playerRotX = 0f;
+                    playerPos = new Vector3(-2, 0, 5);
+                    score = 0;
+                    difficulty = 0.05f;
                 }
             }
             if(gameStart == true)
@@ -102,26 +142,46 @@ namespace CircusCharlieGame
                 if (gameOver == false)
                 {
 
+                    if(Math.Floor(gameTime.TotalGameTime.TotalMilliseconds) % 2000 == 0) //add another barrel
+                    {
+                        barrelsPos.Add(new Vector3(3.5f, 0, rand.Next(4,6)));
+                    }
+
 
                     if (score % 500 == 0)
                     {
                         difficulty = difficulty * 1.25f;
                     }
 
-                    barrelPos.X -= difficulty;
-                    if (barrelPos.X < -4)
+                    //update barrels position
+
+                    //barrelPos.X -= difficulty;
+                    //if (barrelPos.X < -4)
+                    //{
+                    //barrelPos.X = 3f;
+                    //barrelPos.Z = rand.Next(4, 6);
+                    //}
+                    for (int b = 0; b < barrelsPos.Count; b++)
                     {
-                        barrelPos.X = 3f;
-                        barrelPos.Z = rand.Next(4, 6);
+                        barrelsPos[b] -= new Vector3((float)(difficulty), 0, 0);
+                        if (barrelsPos[b].X < -4)
+                        {
+                            barrelsPos.RemoveAt(b);
+                            //barrelsPos[b].Z = rand.Next(4, 6);
+                        }
+
+                        
                     }
 
+                    if (playerPos.Y == 0 && notAtMaxHeight == false)
+                        notAtMaxHeight = true;
 
                     if (Keyboard.GetState().IsKeyDown(Keys.Up))
                     {
 
                         playerPos.Z -= .2f;
-                        if (playerPos.Z < 0)
-                            playerPos.Z = 0f;
+                        if (playerPos.Z < 2)
+                            playerPos.Z = 2f;
                     }
                     if (Keyboard.GetState().IsKeyDown(Keys.Down))
                     {
@@ -129,24 +189,38 @@ namespace CircusCharlieGame
                         if (playerPos.Z > 5)
                             playerPos.Z = 5f;
                     }
-                    if (Keyboard.GetState().IsKeyDown(Keys.Space))
+                    if (Keyboard.GetState().IsKeyDown(Keys.Space) && notAtMaxHeight == true)
                     {
-                        playerPos.Y += .40f;
+                        playerPos.Y += .30f;
                     }
                     if (playerPos.Y > 0)
                     {
-                        playerPos.Y -= .2f;
+                        playerPos.Y -= .05f;
                         if (playerPos.Y < 0)
                             playerPos.Y = 0f;
                     }
                     if (playerPos.Y > 2)
-                        playerPos.Y = 2f;
-
-                    if (Vector3.Distance(barrelPos, playerPos) < 1f)
                     {
-                        playerRotX = -90;
-                        gameOver = true;
+                        playerPos.Y = 2f;
+                        notAtMaxHeight = false;
                     }
+                        
+
+
+                    foreach(Vector3 b in barrelsPos)
+                    {
+                        if (Vector3.Distance(b, playerPos) < 0.9f)
+                        {
+                            playerRotX = -90;
+                            gameOver = true;
+                        }
+                    }
+
+                    //if (Vector3.Distance(barrelPos, playerPos) < 1f)
+                    //{
+                        //playerRotX = -90;
+                        //gameOver = true;
+                    //}
 
 
                     world = Matrix.CreateScale(0.002f) *
@@ -173,11 +247,60 @@ namespace CircusCharlieGame
             GraphicsDevice.Clear(Color.CornflowerBlue);
 
             // TODO: Add your drawing code here
+           
 
-            if(gameStart==true)
+            if (gameStart==true)
             {
+                ground.Draw(worldGround, view, proj);
+                //draw a barrel at each position
+                foreach (Vector3 b in barrelsPos)
+                {
+                    barrelWorld = Matrix.CreateScale(0.003f) *
+                            Matrix.CreateRotationY(MathHelper.ToRadians(playerRotY)) *
+                            Matrix.CreateTranslation(b);
+                    // barrel.Draw(barrelWorld, view, proj);
+
+                    foreach (ModelMesh mesh in barrel.Meshes)
+                    {
+                        foreach (BasicEffect effect in mesh.Effects)
+                        {
+                            effect.World = barrelWorld;
+                            effect.View = view;
+                            effect.Projection = proj;
+                            effect.EnableDefaultLighting();
+                            effect.LightingEnabled = true;
+                            //effect.EmissiveColor = new Vector3(0.5f, 0.5f, 0.5f);
+                        }
+                        mesh.Draw();
+                    }
+
+                }
+
+
+
+
+
+                //barrel.Draw(barrelWorld, view, proj);
+                //player.Draw(world, view, proj);
+
+                foreach (ModelMesh mesh in player.Meshes)
+                {
+                    foreach (BasicEffect effect in mesh.Effects)
+                    {
+                        effect.World = world;
+                        effect.View = view;
+                        effect.Projection = proj;
+                        effect.EnableDefaultLighting();
+                        effect.LightingEnabled = true;
+                        // effect.EmissiveColor = new Vector3(0.5f, 0.5f, 0.5f);
+                    }
+                    mesh.Draw();
+                }
+
                 if (gameOver == false)
                 {
+                    
+
                     _spriteBatch.Begin();
 
                     _spriteBatch.DrawString(gameFont, "Score = " + score.ToString(), new Vector2(20, 20), Color.Black);
@@ -197,10 +320,11 @@ namespace CircusCharlieGame
                     _spriteBatch.Begin();
 
 
-                    _spriteBatch.DrawString(gameFont, "Game Over!", new Vector2(200, 200), Color.Black);
-                    _spriteBatch.DrawString(gameFont, "Score = " + score.ToString(), new Vector2(200, 225), Color.Black);
+                    _spriteBatch.DrawString(gameFont, "Game Over!", new Vector2(300, 200), Color.Black);
+                    _spriteBatch.DrawString(gameFont, "Score = " + score.ToString(), new Vector2(300, 225), Color.Black);
+                    _spriteBatch.DrawString(gameFont, "Press the Space bar to play again.", new Vector2(300, 250), Color.Black);
 
-
+                    _spriteBatch.DrawString(developedFont, "Developed by Hayden Michael", new Vector2(550, 450), Color.Black);
 
                     _spriteBatch.End();
                 }
@@ -209,20 +333,16 @@ namespace CircusCharlieGame
 
 
 
-
-
-                barrel.Draw(barrelWorld, view, proj);
-                player.Draw(world, view, proj);
+                
+                
             }
             else
             {
                 _spriteBatch.Begin();
 
-
-                _spriteBatch.DrawString(gameFont, "Press the Space bar to start.", new Vector2(350, 200), Color.Black);
+                _spriteBatch.DrawString(gameFont, "Press the Space bar to start.", new Vector2(275, 225), Color.Black);
                 
-
-
+                
 
                 _spriteBatch.End();
             }
